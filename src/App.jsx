@@ -589,18 +589,60 @@ async function doSplit(pdfLib, file, chunks) {
   return results;
 }
 
+// File to base64 for Gemini inline PDF
+async function fileToBase64(file) {
+  const buf = await file.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
+}
+
 // ─── Gemini call ──────────────────────────────────────────────────────────────
-async function callGemini(apiKey, messages, systemPrompt) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-  const contents = messages.map((m) => ({
-    role: m.role === "assistant" ? "model" : "user",
-    parts: [{ text: m.content }],
-  }));
+async function callGemini(apiKey, messages, systemPrompt, pdfFile = null) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+
+  const contents = [];
+  const allMessages = messages.filter(m => m.role === "user" || m.role === "assistant");
+
+  let firstUserSeen = false;
+  for (const m of allMessages) {
+    const role = m.role === "assistant" ? "model" : "user";
+    const parts = [];
+
+    if (role === "user") {
+      // 第一則 user 訊息：附加 PDF 讓 Gemini 直接讀取（限制 50MB）
+      const PDF_SIZE_LIMIT = 50 * 1024 * 1024;
+      if (pdfFile && !firstUserSeen && pdfFile.size <= PDF_SIZE_LIMIT) {
+        firstUserSeen = true;
+        try {
+          const base64 = await fileToBase64(pdfFile);
+          parts.push({ inlineData: { mimeType: "application/pdf", data: base64 } });
+        } catch (e) {
+          console.warn("PDF base64 轉換失敗，將僅以文字對話:", e);
+        }
+      }
+      parts.push({ text: m.content });
+    } else {
+      parts.push({ text: m.content });
+    }
+
+    contents.push({ role, parts });
+  }
+
+  // Gemini 要求第一則必須是 user
+  if (contents.length === 0 || contents[0].role !== "user") {
+    contents.unshift({ role: "user", parts: [{ text: "開始" }] });
+  }
+
   const body = {
-    system_instruction: { parts: [{ text: systemPrompt }] },
     contents,
+    systemInstruction: {
+      parts: [{ text: systemPrompt }]
+    },
     generationConfig: { temperature: 0.2, maxOutputTokens: 2048 },
   };
+
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -618,18 +660,21 @@ async function callGemini(apiKey, messages, systemPrompt) {
 function buildSystemPrompt(fileName, totalPages) {
   return `你是一個 PDF 分割助理。使用者已上傳一份名為「${fileName}」共 ${totalPages} 頁的 PDF 檔案。
 
+【重要】你已收到完整的 PDF 檔案內容，可以直接閱讀並分析其結構（章節、標題、目錄、版面等）。
+
 你的工作是透過對話，理解使用者想如何分割這份 PDF，然後產生分割計畫。
 
 【對話規則】
 - 用繁體中文回應
 - 友善、簡潔地與使用者對話
-- 如果需要更多資訊（例如按章節、關鍵字分割），先詢問
+- 當使用者說「依章節分割」「按架構分割」「依目錄分割」等，請直接分析 PDF 內容，辨識章節/標題邊界，推斷每章起始頁碼，產出分割計畫
+- 若使用者說「每頁獨立」「前半後半」等規則，依其指示處理
 - 當你確定分割方案時，在回應末尾加上一個 JSON 區塊，格式如下：
 
 \`\`\`split-plan
 [
-  {"name": "第一部分_頁1-3", "pages": [1, 2, 3]},
-  {"name": "第二部分_頁4-10", "pages": [4, 5, 6, 7, 8, 9, 10]}
+  {"name": "第一章_緒論", "pages": [1, 2, 3, 4, 5]},
+  {"name": "第二章_文獻探討", "pages": [6, 7, 8, 9, 10, 11, 12]}
 ]
 \`\`\`
 
@@ -659,6 +704,7 @@ function cleanText(text) {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 const HINTS = [
+  "依章節/架構分割",
   "每頁獨立輸出",
   "前半、後半各一份",
   "每 3 頁一組",
@@ -706,11 +752,6 @@ export default function App() {
     document.head.appendChild(s);
   }, []);
 
-  // Auto-verify saved key on mount
-  useEffect(() => {
-    if (apiKey) testApiKey(apiKey, false);
-  }, []); // eslint-disable-line
-
   const saveKey = (key) => {
     try {
       if (key) { localStorage.setItem(LS_KEY, key); setKeySaved(true); }
@@ -757,7 +798,7 @@ export default function App() {
       WELCOME,
       {
         role: "assistant",
-        content: `✅ 已載入 **${file.name}**，共 **${n} 頁**。\n\n你想怎麼分割這份 PDF？可以告訴我：\n- 「每頁獨立」\n- 「每5頁一組」\n- 「第1-10頁一份，其餘一份」\n- 或者描述你的需求，我來幫你規劃！`,
+        content: `✅ 已載入 **${file.name}**，共 **${n} 頁**。${file.size > 50 * 1024 * 1024 ? "\n\n⚠️ 檔案超過 50MB，無法傳送給 AI 分析結構，僅能依頁碼規則分割。" : ""}\n\n你想怎麼分割？可以說：\n- 「**依章節/架構分割**」— 我會分析 PDF 內容辨識章節\n- 「每頁獨立」「每5頁一組」\n- 「第1-10頁一份，其餘一份」\n- 或描述你的需求`,
         id: Date.now().toString(),
       },
     ]);
@@ -776,7 +817,7 @@ export default function App() {
 
     try {
       const sysPrompt = buildSystemPrompt(pdfFile.name, pageCount);
-      const reply = await callGemini(apiKey, newMessages.filter(m => m.id !== "welcome"), sysPrompt);
+      const reply = await callGemini(apiKey, newMessages.filter(m => m.id !== "welcome"), sysPrompt, pdfFile);
 
       const plan = extractSplitPlan(reply);
       const displayText = cleanText(reply);
