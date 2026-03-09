@@ -544,9 +544,69 @@ html, body { height: 100%; background: var(--bg); }
 
 /* scrollbar left */
 .pages-strip::-webkit-scrollbar { width: 3px; }
+/* scrollbar left */
+.pages-strip::-webkit-scrollbar { width: 3px; }
 .pages-strip::-webkit-scrollbar-thumb { background: var(--border); }
 .results-section::-webkit-scrollbar { width: 3px; }
 .results-section::-webkit-scrollbar-thumb { background: var(--border); }
+.pages-strip-custom::-webkit-scrollbar { width: 3px; }
+.pages-strip-custom::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+
+/* ── Settings Modal ── */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+.settings-modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  width: 400px; max-width: 90vw;
+  padding: 24px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+}
+
+.settings-title {
+  font-family: var(--sans);
+  font-size: 16px; font-weight: 700;
+  margin-bottom: 20px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+
+.settings-close {
+  background: none; border: none; color: var(--muted); cursor: pointer; font-size: 18px;
+}
+.settings-close:hover { color: var(--accent2); }
+
+.settings-field { margin-bottom: 16px; }
+.settings-field label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 6px; letter-spacing: 1px; }
+.settings-input {
+  width: 100%; background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 6px; padding: 10px 12px; color: var(--text); font-family: var(--mono); font-size: 13px; outline: none; transition: border-color 0.2s;
+}
+.settings-input:focus { border-color: var(--accent); }
+
+.settings-actions {
+  display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px;
+}
+
+.btn {
+  padding: 8px 16px; border-radius: 6px; font-family: var(--mono); font-size: 12px; cursor: pointer; transition: all 0.2s; border: none;
+}
+.btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+.btn-secondary:hover { background: #2a2a38; }
+.btn-primary { background: linear-gradient(135deg, var(--accent), #6050e0); color: white; }
+.btn-primary:hover { opacity: 0.9; }
+.btn-danger { background: rgba(240, 98, 146, 0.1); color: var(--accent2); border: 1px solid rgba(240, 98, 146, 0.3); }
+.btn-danger:hover { background: rgba(240, 98, 146, 0.2); }
 `;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -598,8 +658,32 @@ async function fileToBase64(file) {
   return btoa(binary);
 }
 
+// Extract text using pdf.js to save tokens and handle large files
+async function extractPdfText(file) {
+  try {
+    if (!window.pdfjsLib) return "";
+    const buf = await file.arrayBuffer();
+    const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
+    const maxPages = Math.min(pdf.numPages, 30); // 避免過大的 prompt，預設最多取前 30 頁
+    let text = "";
+    for (let i = 1; i <= maxPages; i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        let pageText = content.items.map(item => item.str).join(" ");
+        text += `\n[第 ${i} 頁]\n${pageText}\n`;
+    }
+    if (pdf.numPages > maxPages) {
+        text += `\n... (省略後續 ${pdf.numPages - maxPages} 頁內容) ...\n`;
+    }
+    return text.substring(0, 30000); // 強制字數上限
+  } catch (e) {
+    console.error("Text extraction failed:", e);
+    return "";
+  }
+}
+
 // ─── Gemini call ──────────────────────────────────────────────────────────────
-async function callGemini(apiKey, messages, systemPrompt, pdfFile = null) {
+async function callGemini(apiKey, messages, systemPrompt, pdfFile = null, maxTokens = "2048", pdfText = "") {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
   const contents = [];
@@ -611,15 +695,19 @@ async function callGemini(apiKey, messages, systemPrompt, pdfFile = null) {
     const parts = [];
 
     if (role === "user") {
-      // 第一則 user 訊息：附加 PDF 讓 Gemini 直接讀取（限制 50MB）
+      // 第一則 user 訊息：如果有純文字大綱就傳文字，否則才傳 base64 的 PDF (限制 50MB)
       const PDF_SIZE_LIMIT = 50 * 1024 * 1024;
-      if (pdfFile && !firstUserSeen && pdfFile.size <= PDF_SIZE_LIMIT) {
+      if (pdfFile && !firstUserSeen) {
         firstUserSeen = true;
-        try {
-          const base64 = await fileToBase64(pdfFile);
-          parts.push({ inlineData: { mimeType: "application/pdf", data: base64 } });
-        } catch (e) {
-          console.warn("PDF base64 轉換失敗，將僅以文字對話:", e);
+        if (pdfText) {
+          parts.push({ text: `【附帶的 PDF 文字內容 (部分)】\n\n${pdfText}` });
+        } else if (pdfFile.size <= PDF_SIZE_LIMIT) {
+          try {
+            const base64 = await fileToBase64(pdfFile);
+            parts.push({ inlineData: { mimeType: "application/pdf", data: base64 } });
+          } catch (e) {
+            console.warn("PDF base64 轉換失敗，將僅以文字對話:", e);
+          }
         }
       }
       parts.push({ text: m.content });
@@ -640,7 +728,7 @@ async function callGemini(apiKey, messages, systemPrompt, pdfFile = null) {
     systemInstruction: {
       parts: [{ text: systemPrompt }]
     },
-    generationConfig: { temperature: 0.2, maxOutputTokens: 2048 },
+    generationConfig: { temperature: 0.2, maxOutputTokens: parseInt(maxTokens) || 2048 },
   };
 
   const res = await fetch(url, {
@@ -660,7 +748,7 @@ async function callGemini(apiKey, messages, systemPrompt, pdfFile = null) {
 function buildSystemPrompt(fileName, totalPages) {
   return `你是一個 PDF 分割助理。使用者已上傳一份名為「${fileName}」共 ${totalPages} 頁的 PDF 檔案。
 
-【重要】你已收到完整的 PDF 檔案內容，可以直接閱讀並分析其結構（章節、標題、目錄、版面等）。
+【重要】你會收到 PDF 檔案的內容（如果有提供純文字大綱，請以此純文字為準，這樣能省去分析龐大檔案的資源）。請藉此分析其結構（章節、標題、目錄、版面等）。
 
 你的工作是透過對話，理解使用者想如何分割這份 PDF，然後產生分割計畫。
 
@@ -719,11 +807,20 @@ const WELCOME = {
 };
 
 const LS_KEY = "gemini_pdf_splitter_apikey";
+const LS_TOKEN_KEY = "gemini_pdf_splitter_maxtokens";
+const LS_HISTORY_KEY = "gemini_pdf_splitter_history";
 
 export default function App() {
   const [apiKey, setApiKey] = useState(() => {
     try { return localStorage.getItem(LS_KEY) || ""; } catch { return ""; }
   });
+  const [maxTokens, setMaxTokens] = useState(() => {
+    try { return localStorage.getItem(LS_TOKEN_KEY) || "2048"; } catch { return "2048"; }
+  });
+  const [showSettings, setShowSettings] = useState(false);
+  const [tempApiKey, setTempApiKey] = useState("");
+  const [tempMaxTokens, setTempMaxTokens] = useState("2048");
+
   const [apiStatus, setApiStatus] = useState("idle"); // idle | ok | err
   const [keySaved, setKeySaved] = useState(() => {
     try { return !!localStorage.getItem(LS_KEY); } catch { return false; }
@@ -731,7 +828,13 @@ export default function App() {
   const [pdfFile, setPdfFile] = useState(null);
   const [pageCount, setPageCount] = useState(null);
   const [pdfLib, setPdfLib] = useState(null);
-  const [messages, setMessages] = useState([WELCOME]);
+  const [messages, setMessages] = useState(() => {
+    try {
+      const saved = localStorage.getItem(LS_HISTORY_KEY);
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return [WELCOME];
+  });
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
   const [results, setResults] = useState([]);
@@ -739,6 +842,12 @@ export default function App() {
   const [dragging, setDragging] = useState(false);
   const chatEndRef = useRef(null);
   const textareaRef = useRef(null);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(LS_HISTORY_KEY, JSON.stringify(messages));
+    } catch {}
+  }, [messages]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -766,15 +875,32 @@ export default function App() {
     try { localStorage.removeItem(LS_KEY); } catch {}
   };
 
-  const testApiKey = async (key, andSave = true) => {
-    if (!key) { setApiStatus("idle"); return; }
-    try {
-      await callGemini(key, [{ role: "user", content: "hi" }], "Reply OK");
-      setApiStatus("ok");
-      if (andSave) saveKey(key);
-    } catch {
-      setApiStatus("err");
+  const openSettings = () => {
+    setTempApiKey(apiKey);
+    setTempMaxTokens(maxTokens);
+    setShowSettings(true);
+  };
+
+  const saveSettings = async () => {
+    setApiKey(tempApiKey);
+    setMaxTokens(tempMaxTokens);
+    saveKey(tempApiKey);
+    try { localStorage.setItem(LS_TOKEN_KEY, tempMaxTokens); } catch {}
+    
+    if (tempApiKey) {
+      setApiStatus("idle");
+      try {
+        await callGemini(tempApiKey, [{ role: "user", content: "hi" }], "Reply OK", null, tempMaxTokens);
+        setApiStatus("ok");
+        setKeySaved(true);
+      } catch {
+        setApiStatus("err");
+        setKeySaved(false);
+      }
+    } else {
+      setApiStatus("idle");
     }
+    setShowSettings(false);
   };
 
   const handleFile = async (file) => {
@@ -817,7 +943,18 @@ export default function App() {
 
     try {
       const sysPrompt = buildSystemPrompt(pdfFile.name, pageCount);
-      const reply = await callGemini(apiKey, newMessages.filter(m => m.id !== "welcome"), sysPrompt, pdfFile);
+      let extractedText = "";
+      if (window.pdfjsLib) {
+        setMessages((prev) => [...prev, {
+          role: "assistant",
+          content: "*(正在從 PDF 擷取純文字內容...)*",
+          id: Date.now().toString() + "extracting",
+        }]);
+        extractedText = await extractPdfText(pdfFile);
+        setMessages((prev) => prev.filter(m => !m.id.endsWith("extracting")));
+      }
+
+      const reply = await callGemini(apiKey, newMessages.filter(m => m.id !== "welcome"), sysPrompt, pdfFile, maxTokens, extractedText);
 
       const plan = extractSplitPlan(reply);
       const displayText = cleanText(reply);
@@ -846,12 +983,15 @@ export default function App() {
     setTyping(false);
   }, [messages, apiKey, pdfFile, pageCount, typing]);
 
-  const executeSplit = async (plan) => {
+  const executeSplit = async (msgId, plan) => {
     if (!pdfLib || !pdfFile) return;
     const chunks = parseSplitPlan(plan, pageCount);
     const lib = window.PDFLib || pdfLib;
     const res = await doSplit(lib, pdfFile, chunks);
     setResults(res);
+
+    setMessages((prev) => prev.map(m => m.id === msgId ? { ...m, splitDone: true, finalPlan: plan } : m));
+
     setMessages((prev) => [...prev, {
       role: "assistant",
       content: `🎉 分割完成！共產生 **${res.length}** 個檔案，請在左側下載。`,
@@ -887,41 +1027,55 @@ export default function App() {
             × GEMINI AI
           </span>
           <div className="topbar-sep" />
-          <div className="api-input-wrap">
-            <label>GEMINI KEY</label>
-            <input
-              type="password"
-              placeholder="AIza..."
-              value={apiKey}
-              onChange={(e) => { setApiKey(e.target.value); setApiStatus("idle"); setKeySaved(false); }}
-              onBlur={() => testApiKey(apiKey)}
-              onKeyDown={(e) => e.key === "Enter" && testApiKey(apiKey)}
-            />
-            {keySaved && (
-              <span style={{ fontSize: 10, color: "var(--green)", whiteSpace: "nowrap", letterSpacing: 0.5 }}>
-                已記住
-              </span>
-            )}
-            {apiKey && !keySaved && (
-              <button
-                onClick={() => testApiKey(apiKey)}
-                style={{ background: "none", border: "1px solid var(--accent)", color: "var(--accent)", fontFamily: "var(--mono)", fontSize: 10, padding: "2px 8px", borderRadius: 4, cursor: "pointer", whiteSpace: "nowrap" }}
-              >
-                儲存
-              </button>
-            )}
-            {keySaved && (
-              <button
-                onClick={clearKey}
-                title="清除儲存的 Key"
-                style={{ background: "none", border: "none", color: "var(--muted)", fontFamily: "var(--mono)", fontSize: 11, cursor: "pointer", padding: "0 2px" }}
-              >
-                ✕
-              </button>
-            )}
-            <div className={`status-dot ${apiStatus}`} title={apiStatus === "ok" ? "已連線" : apiStatus === "err" ? "連線失敗" : "未驗證"} />
+          <div className="api-input-wrap" style={{ border: 'none', background: 'transparent' }}>
+            <div className={`status-dot ${apiStatus}`} title={apiStatus === "ok" ? "已連線" : apiStatus === "err" ? "連線失敗" : "未驗證"} style={{ marginRight: 8 }} />
+            <button onClick={openSettings} style={{ background: "var(--surface2)", border: "1px solid var(--border)", color: "var(--text)", padding: "6px 12px", borderRadius: 6, cursor: "pointer", fontFamily: "var(--mono)", fontSize: 11, display: "flex", alignItems: "center", gap: 6 }}>
+              ⚙️ 設定
+            </button>
           </div>
         </div>
+
+        {/* Settings Modal */}
+        {showSettings && (
+          <div className="modal-overlay" onClick={() => setShowSettings(false)}>
+            <div className="settings-modal" onClick={e => e.stopPropagation()}>
+              <div className="settings-title">
+                設定 (Settings)
+                <button className="settings-close" onClick={() => setShowSettings(false)}>✕</button>
+              </div>
+              <div className="settings-field">
+                <label>Gemini API 金鑰 (API Key)</label>
+                <input 
+                  type="password" 
+                  className="settings-input" 
+                  value={tempApiKey} 
+                  onChange={e => setTempApiKey(e.target.value)} 
+                  placeholder="AIzaSy..." 
+                />
+              </div>
+              <div className="settings-field">
+                <label>最大生成 Token 數量 (Max Output Tokens)</label>
+                <input 
+                  type="number" 
+                  className="settings-input" 
+                  value={tempMaxTokens} 
+                  onChange={e => setTempMaxTokens(e.target.value)} 
+                  placeholder="2048" 
+                />
+              </div>
+              <div className="settings-actions">
+                <button className="btn btn-danger" style={{ marginRight: 'auto' }} onClick={() => { 
+                  setTempApiKey(""); setTempMaxTokens("2048"); clearKey(); 
+                  try { localStorage.removeItem(LS_TOKEN_KEY); } catch{} 
+                }}>
+                  清除設定
+                </button>
+                <button className="btn btn-secondary" onClick={() => setShowSettings(false)}>取消</button>
+                <button className="btn btn-primary" onClick={saveSettings}>儲存並測試</button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Left Panel */}
         <div className="left-panel">
@@ -996,6 +1150,15 @@ export default function App() {
 
         {/* Chat Panel */}
         <div className="chat-panel">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 24px', borderBottom: '1px solid var(--border)' }}>
+            <span style={{ fontSize: 10, color: "var(--muted)", letterSpacing: 1 }}>CHAT HISTORY</span>
+            <button 
+              onClick={() => { if (confirm("確定要清除所有對話紀錄嗎？")) setMessages([WELCOME]); }} 
+              style={{ background: "none", border: "none", color: "var(--muted)", fontSize: 11, cursor: "pointer" }}
+            >
+              🗑️ 清除紀錄
+            </button>
+          </div>
           <div className="chat-messages">
             {messages.map((m) => (
               <div key={m.id} className={`msg ${m.role}`}>
@@ -1004,15 +1167,21 @@ export default function App() {
                 </div>
                 <div className="msg-bubble">
                   <span dangerouslySetInnerHTML={{ __html: formatMsg(m.content) }} />
-                  {m.plan && (
+                  {m.plan && !m.splitDone && (
                     <div style={{ marginTop: 12 }}>
                       <pre>{JSON.stringify(m.plan, null, 2)}</pre>
                       <button
                         className="msg-action-btn"
-                        onClick={() => executeSplit(m.plan)}
+                        onClick={() => executeSplit(m.id, m.plan)}
                       >
                         ▶ 執行分割
                       </button>
+                    </div>
+                  )}
+                  {m.plan && m.splitDone && (
+                    <div style={{ marginTop: 12, padding: 8, background: 'var(--surface2)', borderRadius: 6, border: '1px solid var(--border)' }}>
+                      <div style={{ fontSize: 10, color: 'var(--green)', marginBottom: 4 }}>✓ 已執行分割設定</div>
+                      <pre style={{ margin: 0 }}>{JSON.stringify(m.finalPlan || m.plan, null, 2)}</pre>
                     </div>
                   )}
                 </div>

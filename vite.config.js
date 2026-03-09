@@ -2,6 +2,6 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
 export default defineConfig({
-  base: '/pdf-splitter/',   // ← 必須與你的 repo 名稱完全一致
+  base: './', // 改成相對路徑，讓它能在任何子層資料夾執行
   plugins: [react()],
 })
