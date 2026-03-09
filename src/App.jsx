@@ -664,18 +664,25 @@ async function extractPdfText(file) {
     if (!window.pdfjsLib) return "";
     const buf = await file.arrayBuffer();
     const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
-    const maxPages = Math.min(pdf.numPages, 30); // 避免過大的 prompt，預設最多取前 30 頁
+    const maxPages = Math.min(pdf.numPages, 500); // 支援大約 500 頁長度的文件
     let text = "";
     for (let i = 1; i <= maxPages; i++) {
         const page = await pdf.getPage(i);
         const content = await page.getTextContent();
-        let pageText = content.items.map(item => item.str).join(" ");
+        let pageText = content.items.map(item => item.str).join(" ").trim();
+        
+        // 為了節省 Token，每頁只擷取前 100 字 (通常章節標題會在頁首)
+        if (pageText.length > 100) {
+            pageText = pageText.substring(0, 100) + "...";
+        }
+        
         text += `\n[第 ${i} 頁]\n${pageText}\n`;
     }
     if (pdf.numPages > maxPages) {
         text += `\n... (省略後續 ${pdf.numPages - maxPages} 頁內容) ...\n`;
     }
-    return text.substring(0, 30000); // 強制字數上限
+    // 整體字數上限 (以 500 頁每頁 100 字來說，最多也僅約 50000 字)
+    return text.substring(0, 60000); 
   } catch (e) {
     console.error("Text extraction failed:", e);
     return "";
@@ -755,7 +762,8 @@ function buildSystemPrompt(fileName, totalPages) {
 【對話規則】
 - 用繁體中文回應
 - 友善、簡潔地與使用者對話
-- 當使用者說「依章節分割」「按架構分割」「依目錄分割」等，請直接分析 PDF 內容，辨識章節/標題邊界，推斷每章起始頁碼，產出分割計畫
+- 當使用者說「依章節分割」「按架構分割」「依目錄分割」等，請直接分析 PDF 內容，仔細辨識章節與標題階層的邊界。
+- 【嚴格要求】請務必正確區分「主章節」（如：第一章、第1章、Chapter 1等）與「子節」（如：1.1、7.2.7 等次要標題）。切勿將子節標題誤判為新的主章節開始，更不可將不同數字的章節混淆（例如分割第9章時誤判跑到7.x節）。請根據內文的編號邏輯與上下文準確判斷起始頁碼，產出分割計畫。
 - 若使用者說「每頁獨立」「前半後半」等規則，依其指示處理
 - 當你確定分割方案時，在回應末尾加上一個 JSON 區塊，格式如下：
 
