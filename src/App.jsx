@@ -2,11 +2,18 @@ import { useState, useRef, useEffect, useCallback } from "react";
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const css = `
-@import url('https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Syne:wght@400;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Syne:wght@400;600;700;800&family=Noto+Serif+TC:wght@400;700;900&display=swap');
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
+  --mono: 'DM Mono', monospace;
+  --sans: 'Syne', sans-serif;
+  --serif: 'Noto Serif TC', serif;
+}
+
+/* Dark theme (default) */
+[data-theme="dark"] {
   --bg: #0e0e12;
   --surface: #16161c;
   --surface2: #1e1e26;
@@ -16,8 +23,79 @@ const css = `
   --green: #4ade80;
   --text: #e8e8f0;
   --muted: #6b6b88;
-  --mono: 'DM Mono', monospace;
-  --sans: 'Syne', sans-serif;
+  --drop-hover: #1a1730;
+  --result-hover: #1a1730;
+  --chip-hover: #1a1730;
+  --user-bubble: linear-gradient(135deg, #2d2560, #3d2050);
+  --user-bubble-border: #4a3a80;
+  --selected-pill: #2d2560;
+  --dl-btn: linear-gradient(135deg, #2d2560, #1a1730);
+  --grid-line: transparent;
+}
+
+/* Light theme */
+[data-theme="light"] {
+  --bg: #f0ebe0;
+  --surface: #faf6f0;
+  --surface2: #e8e0d4;
+  --border: #d0c8bc;
+  --accent: #b5281c;
+  --accent2: #c0392b;
+  --green: #2d7a4f;
+  --text: #1c1410;
+  --muted: #8a7d70;
+  --drop-hover: #f5e8e6;
+  --result-hover: #f5e8e6;
+  --chip-hover: #f5e8e6;
+  --user-bubble: linear-gradient(135deg, #f5e8e6, #faeaea);
+  --user-bubble-border: #d9a8a4;
+  --selected-pill: #f5e8e6;
+  --dl-btn: linear-gradient(135deg, #f5e8e6, #f0ebe0);
+  --grid-line: rgba(180, 168, 155, 0.5);
+}
+
+/* System follows OS preference */
+@media (prefers-color-scheme: dark) {
+  [data-theme="system"] {
+    --bg: #0e0e12;
+    --surface: #16161c;
+    --surface2: #1e1e26;
+    --border: #2a2a38;
+    --accent: #7c6af7;
+    --accent2: #f06292;
+    --green: #4ade80;
+    --text: #e8e8f0;
+    --muted: #6b6b88;
+    --drop-hover: #1a1730;
+    --result-hover: #1a1730;
+    --chip-hover: #1a1730;
+    --user-bubble: linear-gradient(135deg, #2d2560, #3d2050);
+    --user-bubble-border: #4a3a80;
+    --selected-pill: #2d2560;
+    --dl-btn: linear-gradient(135deg, #2d2560, #1a1730);
+    --grid-line: transparent;
+  }
+}
+@media (prefers-color-scheme: light) {
+  [data-theme="system"] {
+    --bg: #f0ebe0;
+    --surface: #faf6f0;
+    --surface2: #e8e0d4;
+    --border: #d0c8bc;
+    --accent: #b5281c;
+    --accent2: #c0392b;
+    --green: #2d7a4f;
+    --text: #1c1410;
+    --muted: #8a7d70;
+    --drop-hover: #f5e8e6;
+    --result-hover: #f5e8e6;
+    --chip-hover: #f5e8e6;
+    --user-bubble: linear-gradient(135deg, #f5e8e6, #faeaea);
+    --user-bubble-border: #d9a8a4;
+    --selected-pill: #f5e8e6;
+    --dl-btn: linear-gradient(135deg, #f5e8e6, #f0ebe0);
+    --grid-line: rgba(180, 168, 155, 0.5);
+  }
 }
 
 html, body { height: 100%; background: var(--bg); }
@@ -29,7 +107,10 @@ html, body { height: 100%; background: var(--bg); }
   height: 100vh;
   font-family: var(--mono);
   color: var(--text);
-  background: var(--bg);
+  background-color: var(--bg);
+  background-image: linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 32px 32px;
   overflow: hidden;
 }
 
@@ -45,9 +126,9 @@ html, body { height: 100%; background: var(--bg); }
 }
 
 .topbar-logo {
-  font-family: var(--sans);
-  font-weight: 800;
-  font-size: 15px;
+  font-family: var(--serif);
+  font-weight: 900;
+  font-size: 30px;
   letter-spacing: -0.5px;
   color: var(--text);
   display: flex;
@@ -143,7 +224,7 @@ html, body { height: 100%; background: var(--bg); }
 
 .drop-zone:hover, .drop-zone.over {
   border-color: var(--accent);
-  background: #1a1730;
+  background: var(--drop-hover);
 }
 
 .drop-zone input {
@@ -240,7 +321,7 @@ html, body { height: 100%; background: var(--bg); }
 }
 
 .page-pill.selected {
-  background: #2d2560;
+  background: var(--selected-pill);
   border-color: var(--accent);
   color: var(--accent);
 }
@@ -278,7 +359,7 @@ html, body { height: 100%; background: var(--bg); }
 
 .result-item:hover {
   border-color: var(--accent);
-  background: #1a1730;
+  background: var(--result-hover);
 }
 
 .result-item-icon { font-size: 14px; opacity: 0.6; }
@@ -305,7 +386,7 @@ html, body { height: 100%; background: var(--bg); }
 
 .dl-all-btn {
   width: 100%;
-  background: linear-gradient(135deg, #2d2560, #1a1730);
+  background: var(--dl-btn);
   border: 1px solid var(--accent);
   color: var(--accent);
   font-family: var(--mono);
@@ -318,7 +399,7 @@ html, body { height: 100%; background: var(--bg); }
   margin-top: 8px;
 }
 
-.dl-all-btn:hover { background: #2d2560; box-shadow: 0 0 16px #7c6af730; }
+.dl-all-btn:hover { background: var(--selected-pill); box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 30%, transparent); }
 
 /* ── Right Panel - Chat ── */
 .chat-panel {
@@ -383,8 +464,8 @@ html, body { height: 100%; background: var(--bg); }
 }
 
 .msg.user .msg-bubble {
-  background: linear-gradient(135deg, #2d2560, #3d2050);
-  border: 1px solid #4a3a80;
+  background: var(--user-bubble);
+  border: 1px solid var(--user-bubble-border);
   color: var(--text);
 }
 
@@ -526,7 +607,7 @@ html, body { height: 100%; background: var(--bg); }
 .hint-chip:hover {
   border-color: var(--accent);
   color: var(--accent);
-  background: #1a1730;
+  background: var(--chip-hover);
 }
 
 .empty-state {
@@ -607,6 +688,44 @@ html, body { height: 100%; background: var(--bg); }
 .btn-primary:hover { opacity: 0.9; }
 .btn-danger { background: rgba(240, 98, 146, 0.1); color: var(--accent2); border: 1px solid rgba(240, 98, 146, 0.3); }
 .btn-danger:hover { background: rgba(240, 98, 146, 0.2); }
+
+/* ── Theme Switcher ── */
+.theme-switcher {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 3px;
+}
+
+.theme-btn {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  position: relative;
+}
+
+.theme-btn:hover {
+  background: var(--border);
+  color: var(--text);
+}
+
+.theme-btn.active {
+  background: var(--accent);
+  color: white;
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 50%, transparent);
+}
 `;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -667,22 +786,22 @@ async function extractPdfText(file) {
     const maxPages = Math.min(pdf.numPages, 500); // 支援大約 500 頁長度的文件
     let text = "";
     for (let i = 1; i <= maxPages; i++) {
-        const page = await pdf.getPage(i);
-        const content = await page.getTextContent();
-        let pageText = content.items.map(item => item.str).join(" ").trim();
-        
-        // 為了節省 Token，每頁只擷取前 100 字 (通常章節標題會在頁首)
-        if (pageText.length > 100) {
-            pageText = pageText.substring(0, 100) + "...";
-        }
-        
-        text += `\n[第 ${i} 頁]\n${pageText}\n`;
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      let pageText = content.items.map(item => item.str).join(" ").trim();
+
+      // 為了節省 Token，每頁只擷取前 100 字 (通常章節標題會在頁首)
+      if (pageText.length > 100) {
+        pageText = pageText.substring(0, 100) + "...";
+      }
+
+      text += `\n[第 ${i} 頁]\n${pageText}\n`;
     }
     if (pdf.numPages > maxPages) {
-        text += `\n... (省略後續 ${pdf.numPages - maxPages} 頁內容) ...\n`;
+      text += `\n... (省略後續 ${pdf.numPages - maxPages} 頁內容) ...\n`;
     }
     // 整體字數上限 (以 500 頁每頁 100 字來說，最多也僅約 50000 字)
-    return text.substring(0, 60000); 
+    return text.substring(0, 60000);
   } catch (e) {
     console.error("Text extraction failed:", e);
     return "";
@@ -818,6 +937,8 @@ const LS_KEY = "gemini_pdf_splitter_apikey";
 const LS_TOKEN_KEY = "gemini_pdf_splitter_maxtokens";
 const LS_HISTORY_KEY = "gemini_pdf_splitter_history";
 
+const LS_THEME_KEY = "gemini_pdf_splitter_theme";
+
 export default function App() {
   const [apiKey, setApiKey] = useState(() => {
     try { return localStorage.getItem(LS_KEY) || ""; } catch { return ""; }
@@ -825,7 +946,15 @@ export default function App() {
   const [maxTokens, setMaxTokens] = useState(() => {
     try { return localStorage.getItem(LS_TOKEN_KEY) || "2048"; } catch { return "2048"; }
   });
+  const [theme, setTheme] = useState(() => {
+    try { return localStorage.getItem(LS_THEME_KEY) || "light"; } catch { return "light"; }
+  });
   const [showSettings, setShowSettings] = useState(false);
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    try { localStorage.setItem(LS_THEME_KEY, theme); } catch { }
+  }, [theme]);
   const [tempApiKey, setTempApiKey] = useState("");
   const [tempMaxTokens, setTempMaxTokens] = useState("2048");
 
@@ -840,7 +969,7 @@ export default function App() {
     try {
       const saved = localStorage.getItem(LS_HISTORY_KEY);
       if (saved) return JSON.parse(saved);
-    } catch {}
+    } catch { }
     return [WELCOME];
   });
   const [input, setInput] = useState("");
@@ -854,7 +983,7 @@ export default function App() {
   useEffect(() => {
     try {
       localStorage.setItem(LS_HISTORY_KEY, JSON.stringify(messages));
-    } catch {}
+    } catch { }
   }, [messages]);
 
   useEffect(() => {
@@ -873,14 +1002,14 @@ export default function App() {
     try {
       if (key) { localStorage.setItem(LS_KEY, key); setKeySaved(true); }
       else { localStorage.removeItem(LS_KEY); setKeySaved(false); }
-    } catch {}
+    } catch { }
   };
 
   const clearKey = () => {
     setApiKey("");
     setApiStatus("idle");
     setKeySaved(false);
-    try { localStorage.removeItem(LS_KEY); } catch {}
+    try { localStorage.removeItem(LS_KEY); } catch { }
   };
 
   const openSettings = () => {
@@ -893,8 +1022,8 @@ export default function App() {
     setApiKey(tempApiKey);
     setMaxTokens(tempMaxTokens);
     saveKey(tempApiKey);
-    try { localStorage.setItem(LS_TOKEN_KEY, tempMaxTokens); } catch {}
-    
+    try { localStorage.setItem(LS_TOKEN_KEY, tempMaxTokens); } catch { }
+
     if (tempApiKey) {
       setApiStatus("idle");
       try {
@@ -1029,14 +1158,37 @@ export default function App() {
         <div className="topbar">
           <div className="topbar-logo">
             <div className="dot" />
-            PDF SPLITTER
+            智慧分割PDF
           </div>
           <span style={{ fontSize: 11, color: "var(--muted)", letterSpacing: 1 }}>
-            × GEMINI AI
+            × GEMINI 2.5
           </span>
           <div className="topbar-sep" />
-          <div className="api-input-wrap" style={{ border: 'none', background: 'transparent' }}>
-            <div className={`status-dot ${apiStatus}`} title={apiStatus === "ok" ? "已連線" : apiStatus === "err" ? "連線失敗" : "未驗證"} style={{ marginRight: 8 }} />
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div className="theme-switcher">
+              <button
+                className={`theme-btn ${theme === "system" ? "active" : ""}`}
+                onClick={() => setTheme("system")}
+                title="系統預設"
+              >
+                ○
+              </button>
+              <button
+                className={`theme-btn ${theme === "light" ? "active" : ""}`}
+                onClick={() => setTheme("light")}
+                title="亮色"
+              >
+                ✳
+              </button>
+              <button
+                className={`theme-btn ${theme === "dark" ? "active" : ""}`}
+                onClick={() => setTheme("dark")}
+                title="暗色"
+              >
+                ☽
+              </button>
+            </div>
+            <div className={`status-dot ${apiStatus}`} title={apiStatus === "ok" ? "已連線" : apiStatus === "err" ? "連線失敗" : "未驗證"} />
             <button onClick={openSettings} style={{ background: "var(--surface2)", border: "1px solid var(--border)", color: "var(--text)", padding: "6px 12px", borderRadius: 6, cursor: "pointer", fontFamily: "var(--mono)", fontSize: 11, display: "flex", alignItems: "center", gap: 6 }}>
               ⚙️ 設定
             </button>
@@ -1053,28 +1205,28 @@ export default function App() {
               </div>
               <div className="settings-field">
                 <label>Gemini API 金鑰 (API Key)</label>
-                <input 
-                  type="password" 
-                  className="settings-input" 
-                  value={tempApiKey} 
-                  onChange={e => setTempApiKey(e.target.value)} 
-                  placeholder="AIzaSy..." 
+                <input
+                  type="password"
+                  className="settings-input"
+                  value={tempApiKey}
+                  onChange={e => setTempApiKey(e.target.value)}
+                  placeholder="AIzaSy..."
                 />
               </div>
               <div className="settings-field">
                 <label>最大生成 Token 數量 (Max Output Tokens)</label>
-                <input 
-                  type="number" 
-                  className="settings-input" 
-                  value={tempMaxTokens} 
-                  onChange={e => setTempMaxTokens(e.target.value)} 
-                  placeholder="2048" 
+                <input
+                  type="number"
+                  className="settings-input"
+                  value={tempMaxTokens}
+                  onChange={e => setTempMaxTokens(e.target.value)}
+                  placeholder="2048"
                 />
               </div>
               <div className="settings-actions">
-                <button className="btn btn-danger" style={{ marginRight: 'auto' }} onClick={() => { 
-                  setTempApiKey(""); setTempMaxTokens("2048"); clearKey(); 
-                  try { localStorage.removeItem(LS_TOKEN_KEY); } catch{} 
+                <button className="btn btn-danger" style={{ marginRight: 'auto' }} onClick={() => {
+                  setTempApiKey(""); setTempMaxTokens("2048"); clearKey();
+                  try { localStorage.removeItem(LS_TOKEN_KEY); } catch { }
                 }}>
                   清除設定
                 </button>
@@ -1160,8 +1312,8 @@ export default function App() {
         <div className="chat-panel">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 24px', borderBottom: '1px solid var(--border)' }}>
             <span style={{ fontSize: 10, color: "var(--muted)", letterSpacing: 1 }}>CHAT HISTORY</span>
-            <button 
-              onClick={() => { if (confirm("確定要清除所有對話紀錄嗎？")) setMessages([WELCOME]); }} 
+            <button
+              onClick={() => { if (confirm("確定要清除所有對話紀錄嗎？")) setMessages([WELCOME]); }}
               style={{ background: "none", border: "none", color: "var(--muted)", fontSize: 11, cursor: "pointer" }}
             >
               🗑️ 清除紀錄
