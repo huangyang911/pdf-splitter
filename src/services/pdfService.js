@@ -90,8 +90,7 @@ export async function extractPdfText(file) {
     const maxPages = Math.min(pdf.numPages, 500);
     let extractedText = "";
     let totalTokensEstimate = 0;
-    const GLOBAL_LIMIT = 60000; // 總字數上限
-
+    const GLOBAL_LIMIT = 200000; // 總字數上限
     for (let i = 1; i <= maxPages; i++) {
         const page = await pdf.getPage(i);
         const content = await page.getTextContent();
@@ -101,7 +100,7 @@ export async function extractPdfText(file) {
         const isToc = /目錄|目次|Contents|CHAPTER|第.*[章節]|Index/i.test(fullPageText) || 
                       (fullPageText.split(/\.{3,}/).length > 3); // 偵測點點點 (....)
 
-        const limit = isToc ? 2000 : 300; // 目錄頁抓更多，正文頁抓標題即可
+        const limit = isToc ? 3000 : 500; // 目錄頁抓更多，正文頁抓標題即可
         let pageText = fullPageText.substring(0, limit);
         
         if (fullPageText.length > limit) {

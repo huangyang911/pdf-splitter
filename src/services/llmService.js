@@ -70,15 +70,20 @@ async function callGemini(apiKey, model, messages, systemPrompt, maxTokens, pdfF
       const PDF_SIZE_LIMIT = 50 * 1024 * 1024;
       if (pdfFile && !firstUserSeen) {
         firstUserSeen = true;
-        if (pdfText) {
-          parts.push({ text: `【附帶的 PDF 文字內容 (部分擷取)】\n\n${pdfText}` });
-        } else if (pdfFile.size <= PDF_SIZE_LIMIT && fileToBase64Fn) {
+        
+        // 優先傳送 PDF 檔案 (Gemini 原生解析能力最強)
+        if (pdfFile.size <= PDF_SIZE_LIMIT && fileToBase64Fn) {
           try {
             const base64 = await fileToBase64Fn(pdfFile);
             parts.push({ inlineData: { mimeType: "application/pdf", data: base64 } });
           } catch (e) {
-            console.warn("PDF base64 轉換失敗，將僅以文字對話:", e);
+            console.warn("PDF base64 轉換失敗:", e);
           }
+        }
+        
+        // 輔助文字內容
+        if (pdfText) {
+          parts.push({ text: `【附帶的 PDF 文字大綱 (輔助參考)】\n\n${pdfText}` });
         }
       }
       parts.push({ text: m.content });
