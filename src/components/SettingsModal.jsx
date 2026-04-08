@@ -37,7 +37,11 @@ const SettingsModal = ({
         console.warn('Fetched models list is empty');
       }
     } catch (e) {
-      alert(`讀取失敗: ${e.message}\n請檢查 API Base 與 CORS 設定`);
+      let msg = e.message;
+      if (msg === 'Failed to fetch' && window.location.protocol === 'https:') {
+        msg = '連線被瀏覽器攔截 (HTTPS 網頁無法存取 HTTP API)。\n\n請點擊網址列左側鎖頭 -> 「網站設定」 -> 將「不安全內容」改為「允許」，然後重新整理網頁。';
+      }
+      alert(`讀取失敗: ${msg}`);
     } finally {
       setFetching(false);
     }
