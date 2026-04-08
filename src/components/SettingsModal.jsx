@@ -33,8 +33,11 @@ const SettingsModal = ({
     try {
       const list = await llmService.fetchModels(tempProvider, tempApiKey, tempApiBase);
       setModels(list);
-      // If current model not in list, but list not empty, maybe auto-select? 
-      // User decision. I'll just keep it as is or let user choose.
+      if (list.length === 0 && tempApiKey) {
+        console.warn('Fetched models list is empty');
+      }
+    } catch (e) {
+      alert(`讀取失敗: ${e.message}\n請檢查 API Base 與 CORS 設定`);
     } finally {
       setFetching(false);
     }

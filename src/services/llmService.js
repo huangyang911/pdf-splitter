@@ -4,10 +4,9 @@
  * Fetch available models from the provider
  */
 export async function fetchModels(provider, apiKey, apiBase) {
-  if (!apiKey) return [];
-  
   try {
     if (provider === 'gemini') {
+      if (!apiKey) return [];
       const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
       const res = await fetch(url);
       if (!res.ok) throw new Error('Gemini API 錯誤');
@@ -16,19 +15,24 @@ export async function fetchModels(provider, apiKey, apiBase) {
         .filter(m => m.supportedGenerationMethods.includes('generateContent'))
         .map(m => ({ id: m.name.split('/').pop(), name: m.displayName }));
     } else {
+      if (!apiBase) return [];
       const baseUrl = apiBase.replace(/\/+$/, '');
       const url = `${baseUrl}/models`;
-      const res = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${apiKey}` }
-      });
-      if (!res.ok) throw new Error('LLM API 錯誤');
+      const headers = {};
+      if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
+      
+      const res = await fetch(url, { headers });
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(`HTTP ${res.status}: ${txt.substring(0, 30)}`);
+      }
       const data = await res.json();
-      // OpenAI format usually returns { data: [{ id: ... }] }
-      return (data.data || data).map(m => ({ id: m.id, name: m.id }));
+      const list = data.data || data;
+      return Array.isArray(list) ? list.map(m => ({ id: m.id, name: m.id })) : [];
     }
   } catch (e) {
     console.error('Fetch models failed:', e);
-    return [];
+    throw e;
   }
 }
 
