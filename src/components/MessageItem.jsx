@@ -1,6 +1,6 @@
 // src/components/MessageItem.jsx
 import React from 'react';
-import * as geminiService from '../services/geminiService';
+import * as llmService from '../services/llmService';
 
 const MessageItem = ({ message, onExecuteSplit }) => {
   return (
@@ -9,7 +9,7 @@ const MessageItem = ({ message, onExecuteSplit }) => {
         {message.role === "user" ? "你" : "✦"}
       </div>
       <div className="msg-bubble">
-        <span dangerouslySetInnerHTML={{ __html: geminiService.safeFormatMsg(message.content) }} />
+        <span dangerouslySetInnerHTML={{ __html: llmService.safeFormatMsg(message.content) }} />
         {message.plan && !message.splitDone && (
           <div style={{ marginTop: 12 }}>
             <pre>{JSON.stringify(message.plan, null, 2)}</pre>

@@ -1,10 +1,62 @@
-// src/services/geminiService.js
+// src/services/llmService.js
 
 /**
- * Call Gemini API
+ * Fetch available models from the provider
  */
-export async function callGemini(apiKey, messages, systemPrompt, pdfFile = null, maxTokens = "2048", pdfText = "", fileToBase64Fn) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+export async function fetchModels(provider, apiKey, apiBase) {
+  if (!apiKey) return [];
+  
+  try {
+    if (provider === 'gemini') {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('Gemini API 錯誤');
+      const data = await res.json();
+      return data.models
+        .filter(m => m.supportedGenerationMethods.includes('generateContent'))
+        .map(m => ({ id: m.name.split('/').pop(), name: m.displayName }));
+    } else {
+      const baseUrl = apiBase.replace(/\/+$/, '');
+      const url = `${baseUrl}/models`;
+      const res = await fetch(url, {
+        headers: { 'Authorization': `Bearer ${apiKey}` }
+      });
+      if (!res.ok) throw new Error('LLM API 錯誤');
+      const data = await res.json();
+      // OpenAI format usually returns { data: [{ id: ... }] }
+      return (data.data || data).map(m => ({ id: m.id, name: m.id }));
+    }
+  } catch (e) {
+    console.error('Fetch models failed:', e);
+    return [];
+  }
+}
+
+/**
+ * Call LLM API (Gemini or OpenAI-compatible)
+ */
+export async function callLLM({ 
+  provider, 
+  apiKey, 
+  apiBase, 
+  model, 
+  messages, 
+  systemPrompt, 
+  maxTokens = "2048", 
+  pdfFile = null, 
+  pdfText = "", 
+  fileToBase64Fn 
+}) {
+  if (provider === 'gemini') {
+    return callGemini(apiKey, model, messages, systemPrompt, maxTokens, pdfFile, pdfText, fileToBase64Fn);
+  } else {
+    return callGenericLLM(apiKey, apiBase, model, messages, systemPrompt, maxTokens, pdfText);
+  }
+}
+
+async function callGemini(apiKey, model, messages, systemPrompt, maxTokens, pdfFile, pdfText, fileToBase64Fn) {
+  const modelId = model || "gemini-1.5-flash";
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${apiKey}`;
 
   const contents = [];
   const allMessages = messages.filter(m => m.role === "user" || m.role === "assistant");
@@ -33,7 +85,6 @@ export async function callGemini(apiKey, messages, systemPrompt, pdfFile = null,
     } else {
       parts.push({ text: m.content });
     }
-
     contents.push({ role, parts });
   }
 
@@ -43,9 +94,7 @@ export async function callGemini(apiKey, messages, systemPrompt, pdfFile = null,
 
   const body = {
     contents,
-    systemInstruction: {
-      parts: [{ text: systemPrompt }]
-    },
+    systemInstruction: { parts: [{ text: systemPrompt }] },
     generationConfig: { 
       temperature: 0.2, 
       maxOutputTokens: parseInt(maxTokens) || 2048,
@@ -66,6 +115,49 @@ export async function callGemini(apiKey, messages, systemPrompt, pdfFile = null,
   
   const data = await res.json();
   return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+}
+
+async function callGenericLLM(apiKey, apiBase, model, messages, systemPrompt, maxTokens, pdfText) {
+  const modelId = model || "gpt-3.5-turbo";
+  const baseUrl = apiBase.replace(/\/+$/, '');
+  const url = `${baseUrl}/chat/completions`;
+
+  const msgs = [
+    { role: "system", content: systemPrompt },
+    ...messages.map(m => ({ role: m.role, content: m.content }))
+  ];
+
+  // For generic LLM, we inject pdfText into the first user message if available
+  if (pdfText) {
+    const firstUserIdx = msgs.findIndex(m => m.role === 'user');
+    if (firstUserIdx !== -1) {
+      msgs[firstUserIdx].content = `【附帶的 PDF 文字內容】\n\n${pdfText}\n\n${msgs[firstUserIdx].content}`;
+    }
+  }
+
+  const body = {
+    model: modelId,
+    messages: msgs,
+    temperature: 0.2,
+    max_tokens: parseInt(maxTokens) || 2048,
+  };
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { 
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`
+    },
+    body: JSON.stringify(body),
+  });
+  
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error?.message || `HTTP ${res.status}`);
+  }
+  
+  const data = await res.json();
+  return data.choices?.[0]?.message?.content || "";
 }
 
 /**
@@ -124,7 +216,6 @@ export function cleanText(text) {
 export function safeFormatMsg(text) {
   if (!text) return "";
   
-  // 1. 轉義基本 HTML 標籤
   let safe = text
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -132,11 +223,10 @@ export function safeFormatMsg(text) {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
 
-  // 2. 還原安全的 Markdown 風格標記 (粗體與程式碼)
   safe = safe
-    .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>") // 粗體
-    .replace(/`([^`]+)`/g, "<code>$1</code>")      // 程式碼
-    .replace(/\n/g, "<br/>");                      // 斷行
+    .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\n/g, "<br/>");
 
   return safe;
 }

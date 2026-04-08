@@ -1,14 +1,17 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import * as pdfService from "./services/pdfService";
-import * as geminiService from "./services/geminiService";
+import * as llmService from "./services/llmService";
 
 import TopBar from "./components/TopBar";
 import Sidebar from "./components/Sidebar";
 import ChatPanel from "./components/ChatPanel";
 import SettingsModal from "./components/SettingsModal";
 
-const KEY_NAME = "GEMINI_API_KEY";
+const KEY_NAME = "LLM_API_KEY";
 const LS_TOKEN_KEY = "MAX_OUTPUT_TOKENS";
+const LS_PROVIDER = "LLM_PROVIDER";
+const LS_API_BASE = "LLM_API_BASE";
+const LS_MODEL = "LLM_MODEL";
 
 const WELCOME = {
   role: "assistant",
@@ -20,9 +23,16 @@ export default function App() {
   const [theme, setTheme] = useState(() => localStorage.getItem("theme") || "system");
   const [apiKey, setApiKey] = useState(() => localStorage.getItem(KEY_NAME) || "");
   const [maxTokens, setMaxTokens] = useState(() => localStorage.getItem(LS_TOKEN_KEY) || "2048");
+  const [provider, setProvider] = useState(() => localStorage.getItem(LS_PROVIDER) || "gemini");
+  const [apiBase, setApiBase] = useState(() => localStorage.getItem(LS_API_BASE) || "");
+  const [model, setModel] = useState(() => localStorage.getItem(LS_MODEL) || "");
+
   const [showSettings, setShowSettings] = useState(false);
   const [tempApiKey, setTempApiKey] = useState(apiKey);
   const [tempMaxTokens, setTempMaxTokens] = useState(maxTokens);
+  const [tempProvider, setTempProvider] = useState(provider);
+  const [tempApiBase, setTempApiBase] = useState(apiBase);
+  const [tempModel, setTempModel] = useState(model);
   const [apiStatus, setApiStatus] = useState("idle");
 
   const [pdfLib, setPdfLib] = useState(null);
@@ -47,13 +57,28 @@ export default function App() {
   const saveSettings = async () => {
     setApiKey(tempApiKey);
     setMaxTokens(tempMaxTokens);
+    setProvider(tempProvider);
+    setApiBase(tempApiBase);
+    setModel(tempModel);
+
     localStorage.setItem(KEY_NAME, tempApiKey);
     localStorage.setItem(LS_TOKEN_KEY, tempMaxTokens);
+    localStorage.setItem(LS_PROVIDER, tempProvider);
+    localStorage.setItem(LS_API_BASE, tempApiBase);
+    localStorage.setItem(LS_MODEL, tempModel);
 
     if (tempApiKey) {
       setApiStatus("idle");
       try {
-        await geminiService.callGemini(tempApiKey, [{ role: "user", content: "hi" }], "Reply OK", null, tempMaxTokens);
+        await llmService.callLLM({
+          provider: tempProvider,
+          apiKey: tempApiKey,
+          apiBase: tempApiBase,
+          model: tempModel,
+          messages: [{ role: "user", content: "hi" }],
+          systemPrompt: "Reply OK",
+          maxTokens: tempMaxTokens
+        });
         setApiStatus("ok");
       } catch {
         setApiStatus("err");
@@ -65,10 +90,21 @@ export default function App() {
   const clearSettings = () => {
     setTempApiKey("");
     setTempMaxTokens("2048");
+    setTempProvider("gemini");
+    setTempApiBase("");
+    setTempModel("");
+    
     setApiKey("");
     setMaxTokens("2048");
+    setProvider("gemini");
+    setApiBase("");
+    setModel("");
+
     localStorage.removeItem(KEY_NAME);
     localStorage.removeItem(LS_TOKEN_KEY);
+    localStorage.removeItem(LS_PROVIDER);
+    localStorage.removeItem(LS_API_BASE);
+    localStorage.removeItem(LS_MODEL);
     setApiStatus("idle");
   };
 
@@ -104,7 +140,7 @@ export default function App() {
     setTyping(true);
 
     try {
-      const sysPrompt = geminiService.buildSystemPrompt(pdfFile.name, pageCount);
+      const sysPrompt = llmService.buildSystemPrompt(pdfFile.name, pageCount);
       let extractedText = "";
       
       setMessages((prev) => [...prev, {
@@ -116,10 +152,21 @@ export default function App() {
       extractedText = await pdfService.extractPdfText(pdfFile);
       setMessages((prev) => prev.filter(m => m.id !== "extracting"));
 
-      const reply = await geminiService.callGemini(apiKey, newMessages.filter(m => m.id !== "welcome"), sysPrompt, pdfFile, maxTokens, extractedText, pdfService.fileToBase64);
+      const reply = await llmService.callLLM({
+        provider,
+        apiKey,
+        apiBase,
+        model,
+        messages: newMessages.filter(m => m.id !== "welcome"),
+        systemPrompt: sysPrompt,
+        pdfFile,
+        maxTokens,
+        pdfText: extractedText,
+        fileToBase64Fn: pdfService.fileToBase64
+      });
 
-      const plan = geminiService.extractSplitPlan(reply);
-      const displayText = geminiService.cleanText(reply);
+      const plan = llmService.extractSplitPlan(reply);
+      const displayText = llmService.cleanText(reply);
 
       setMessages((prev) => [...prev, {
         role: "assistant",
@@ -165,7 +212,14 @@ export default function App() {
         theme={theme} 
         setTheme={setTheme} 
         apiStatus={apiStatus} 
-        openSettings={() => { setTempApiKey(apiKey); setTempMaxTokens(maxTokens); setShowSettings(true); }} 
+        openSettings={() => { 
+          setTempApiKey(apiKey); 
+          setTempMaxTokens(maxTokens); 
+          setTempProvider(provider);
+          setTempApiBase(apiBase);
+          setTempModel(model);
+          setShowSettings(true); 
+        }} 
       />
       
       <SettingsModal 
@@ -175,6 +229,12 @@ export default function App() {
         setTempApiKey={setTempApiKey}
         tempMaxTokens={tempMaxTokens}
         setTempMaxTokens={setTempMaxTokens}
+        tempProvider={tempProvider}
+        setTempProvider={setTempProvider}
+        tempApiBase={tempApiBase}
+        setTempApiBase={setTempApiBase}
+        tempModel={tempModel}
+        setTempModel={setTempModel}
         onSave={saveSettings}
         onClear={clearSettings}
       />
