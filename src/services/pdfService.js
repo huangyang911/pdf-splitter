@@ -13,10 +13,29 @@ export function range(a, b) {
  * Build structured split plan from Gemini JSON response
  */
 export function parseSplitPlan(json, totalPages) {
+  if (!Array.isArray(json)) return [];
+  
   return json.map((item) => {
     let pages = item.pages;
+    
+    // 如果 pages 是字串 (例如 "1-10" 或 "1,2,3")，將其轉換為陣列
+    if (typeof pages === 'string') {
+      if (pages.includes('-')) {
+        const [start, end] = pages.split('-').map(Number);
+        if (!isNaN(start) && !isNaN(end)) {
+          pages = range(start, end);
+        }
+      } else if (pages.includes(',')) {
+        pages = pages.split(',').map(Number).filter(n => !isNaN(n));
+      } else {
+        const n = Number(pages);
+        if (!isNaN(n)) pages = [n];
+      }
+    }
+
     if (!pages && item.from && item.to) pages = range(item.from, item.to);
-    if (!pages) return null;
+    if (!Array.isArray(pages)) return null;
+    
     pages = pages.filter((p) => p >= 1 && p <= totalPages);
     return { name: item.name || `section`, pages };
   }).filter(Boolean);

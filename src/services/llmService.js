@@ -185,6 +185,7 @@ export function buildSystemPrompt(fileName, totalPages) {
 
 【注意】
 - name 避免空格，用底線代替
+- pages 必須是數字陣列（例如 [1, 2, 3]），不可使用字串 "1-5"
 - pages 必須在 1 到 ${totalPages} 之間
 - 若使用者說「每頁獨立」，產生每頁一個物件
 - 確認計畫前先用自然語言描述讓使用者確認。`;
