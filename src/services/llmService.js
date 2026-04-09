@@ -33,7 +33,10 @@ export async function fetchModels(provider, apiKey, apiBase) {
       if (!apiKey) return [];
       const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
       const res = await fetch(url);
-      if (!res.ok) throw new Error('Gemini API 錯誤');
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData?.error?.message || 'Gemini API 錯誤');
+      }
       const data = await res.json();
       return data.models
         .filter(m => m.supportedGenerationMethods.includes('generateContent'))
