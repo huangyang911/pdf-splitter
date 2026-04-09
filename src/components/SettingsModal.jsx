@@ -32,6 +32,7 @@ const SettingsModal = ({
 
   const handleFetchModels = async () => {
     if (!tempApiKey) return;
+    setModels([]); // 讀取前先清空，確保不會看到上個供應商的模型
     setFetching(true);
     try {
       const list = await llmService.fetchModels(tempProvider, tempApiKey, tempApiBase);
@@ -111,6 +112,7 @@ const SettingsModal = ({
             <input
               list="model-list"
               className="settings-input"
+              autoComplete="off"
               value={tempModel}
               onChange={e => setTempModel(e.target.value)}
               placeholder={tempProvider === 'gemini' ? 'gemini-2.0-flash' : 'gpt-4o'}

@@ -154,6 +154,7 @@ async function callGemini(apiKey, model, messages, systemPrompt, maxTokens, pdfF
 }
 
 async function callGenericLLM(apiKey, apiBase, model, messages, systemPrompt, maxTokens, pdfText) {
+  if (!apiBase) throw new Error("請先在設定中填寫 API Base URL (例如 https://api.openai.com/v1)");
   const modelId = model || "gpt-3.5-turbo";
   const baseUrl = apiBase.replace(/\/+$/, '');
   const url = `${baseUrl}/chat/completions`;
