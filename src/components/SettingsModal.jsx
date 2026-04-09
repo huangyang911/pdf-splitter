@@ -22,8 +22,11 @@ const SettingsModal = ({
   const [fetching, setFetching] = useState(false);
 
   useEffect(() => {
-    if (show && tempApiKey) {
-      handleFetchModels();
+    if (show) {
+      setModels([]); // 清空舊資料，避免 provider 與 models 對應錯誤
+      if (tempApiKey) {
+        handleFetchModels();
+      }
     }
   }, [show, tempProvider]);
 

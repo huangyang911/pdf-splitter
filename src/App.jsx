@@ -131,7 +131,18 @@ export default function App() {
   };
 
   const sendMessage = useCallback(async (text) => {
-    if (!text.trim() || !apiKey || typing || !pdfFile) return;
+    if (!text.trim() || typing) return;
+    
+    // 加強提示：未上傳文件或未設定 API Key 時給予反饋
+    if (!pdfFile) {
+      alert("請先上傳 PDF 檔案再開始對話！");
+      return;
+    }
+    if (!apiKey) {
+      setShowSettings(true);
+      alert("請先設定 API 金鑰。");
+      return;
+    }
 
     const userMsg = { role: "user", content: text, id: Date.now().toString() };
     const newMessages = [...messages, userMsg];
@@ -212,6 +223,8 @@ export default function App() {
         theme={theme} 
         setTheme={setTheme} 
         apiStatus={apiStatus} 
+        provider={provider}
+        model={model}
         openSettings={() => { 
           setTempApiKey(apiKey); 
           setTempMaxTokens(maxTokens); 

@@ -1,15 +1,15 @@
 // src/components/TopBar.jsx
 import React from 'react';
 
-const TopBar = ({ theme, setTheme, apiStatus, openSettings }) => {
+const TopBar = ({ theme, setTheme, apiStatus, openSettings, provider, model }) => {
   return (
     <div className="topbar">
       <div className="topbar-logo">
         <div className="dot" />
         智慧分割PDF
       </div>
-      <span style={{ fontSize: 11, color: "var(--muted)", letterSpacing: 1 }}>
-        × GEMINI 2.0
+      <span style={{ fontSize: 11, color: "var(--muted)", letterSpacing: 1, textTransform: 'uppercase' }}>
+        × {provider === 'gemini' ? 'Gemini' : 'Generic LLM'} {model ? `(${model})` : ''}
       </span>
       <div className="topbar-sep" />
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
