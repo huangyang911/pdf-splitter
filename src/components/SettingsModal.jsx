@@ -20,10 +20,17 @@ const SettingsModal = ({
 }) => {
   const [models, setModels] = useState([]);
   const [fetching, setFetching] = useState(false);
+  const [lastProvider, setLastProvider] = useState(tempProvider);
 
   useEffect(() => {
     if (show) {
-      setModels([]); // 清空舊資料，避免 provider 與 models 對應錯誤
+      setModels([]);
+      // 當 Provider 真正改變時，清空 Key 與模型，避免 A 廠 Key 配 B 廠模型
+      if (tempProvider !== lastProvider) {
+        setTempApiKey("");
+        setTempModel("");
+        setLastProvider(tempProvider);
+      }
       if (tempApiKey) {
         handleFetchModels();
       }
