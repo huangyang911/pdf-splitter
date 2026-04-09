@@ -1,6 +1,30 @@
 // src/services/llmService.js
 
 /**
+ * 輔助函式：處理 Mixed Content
+ */
+async function smartFetch(url, options = {}) {
+  const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+  const isHttpTarget = url.startsWith('http://');
+
+  // 如果在 HTTPS 環境存取 HTTP (且非本機)，則透過 Vercel Proxy
+  if (isHttps && isHttpTarget && !url.includes('localhost') && !url.includes('127.0.0.1')) {
+    const res = await fetch('/api/proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        url,
+        method: options.method || 'GET',
+        headers: options.headers || {},
+        body: options.body // 這裡傳入的是原始 body (可能是字串或物件)
+      })
+    });
+    return res;
+  }
+  return fetch(url, options);
+}
+
+/**
  * Fetch available models from the provider
  */
 export async function fetchModels(provider, apiKey, apiBase) {
@@ -21,7 +45,7 @@ export async function fetchModels(provider, apiKey, apiBase) {
       const headers = {};
       if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
       
-      const res = await fetch(url, { headers });
+      const res = await smartFetch(url, { headers });
       if (!res.ok) {
         const txt = await res.text();
         throw new Error(`HTTP ${res.status}: ${txt.substring(0, 30)}`);
@@ -151,7 +175,7 @@ async function callGenericLLM(apiKey, apiBase, model, messages, systemPrompt, ma
     max_tokens: parseInt(maxTokens) || 2048,
   };
 
-  const res = await fetch(url, {
+  const res = await smartFetch(url, {
     method: "POST",
     headers: { 
       "Content-Type": "application/json",
