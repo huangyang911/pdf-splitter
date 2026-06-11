@@ -50,7 +50,20 @@ export default function App() {
   }, [theme]);
 
   useEffect(() => {
-    if (window.PDFLib) setPdfLib(window.PDFLib);
+    if (window.PDFLib) {
+      setPdfLib(window.PDFLib);
+    } else {
+      const timer = setInterval(() => {
+        if (window.PDFLib) {
+          setPdfLib(window.PDFLib);
+          clearInterval(timer);
+        }
+      }, 500);
+      return () => clearInterval(timer);
+    }
+  }, []);
+
+  useEffect(() => {
     if (apiKey) setApiStatus("ok");
   }, [apiKey]);
 
@@ -117,7 +130,11 @@ export default function App() {
     
     if (window.pdfjsLib) {
       const buf = await file.arrayBuffer();
-      const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
+      const pdf = await window.pdfjsLib.getDocument({
+        data: buf,
+        cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
+        cMapPacked: true
+      }).promise;
       setPageCount(pdf.numPages);
     }
   };
@@ -201,7 +218,14 @@ export default function App() {
   }, [messages, apiKey, pdfFile, pageCount, typing, maxTokens]);
 
   const onExecuteSplit = async (msgId, plan) => {
-    if (!pdfLib || !pdfFile) return;
+    if (!pdfFile) {
+      alert("請上傳 PDF 檔案");
+      return;
+    }
+    if (!pdfLib) {
+      alert("PDF 處理庫 (pdf-lib) 載入中，請稍候再試。");
+      return;
+    }
     try {
       const chunks = pdfService.parseSplitPlan(plan, pageCount);
       const res = await pdfService.doSplit(pdfLib, pdfFile, chunks);

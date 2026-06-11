@@ -84,7 +84,11 @@ export async function extractPdfText(file) {
     const pdfjsLib = window.pdfjsLib;
     if (!pdfjsLib) return "";
     const buf = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+    const pdf = await pdfjsLib.getDocument({
+      data: buf,
+      cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
+      cMapPacked: true
+    }).promise;
     
     // 限制處理前 500 頁
     const maxPages = Math.min(pdf.numPages, 500);
