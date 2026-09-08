@@ -58,6 +58,7 @@ export async function doSplit(pdfLib, file, chunks) {
       name: chunk.name.endsWith(".pdf") ? chunk.name : chunk.name + ".pdf",
       pages: chunk.pages,
       size: (bytes.length / 1024).toFixed(1),
+      blob,
       url: URL.createObjectURL(blob),
     });
   }
@@ -93,7 +94,6 @@ export async function extractPdfText(file) {
     // 限制處理前 500 頁
     const maxPages = Math.min(pdf.numPages, 500);
     let extractedText = "";
-    let totalTokensEstimate = 0;
     const GLOBAL_LIMIT = 200000; // 總字數上限
     for (let i = 1; i <= maxPages; i++) {
         const page = await pdf.getPage(i);

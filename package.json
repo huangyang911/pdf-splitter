@@ -1,5 +1,6 @@
 {
   "name": "pdf-splitter",
+  "type": "module",
   "homepage": "https://huangyang911.github.io/pdf-splitter",
   "scripts": {
     "dev": "vite",

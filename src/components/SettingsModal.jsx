@@ -1,5 +1,5 @@
 // src/components/SettingsModal.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import * as llmService from '../services/llmService';
 
 const SettingsModal = ({ 
@@ -21,30 +21,16 @@ const SettingsModal = ({
   const [models, setModels] = useState([]);
   const [fetching, setFetching] = useState(false);
   const [lastProvider, setLastProvider] = useState(tempProvider);
+  const previousShow = useRef(false);
 
-  useEffect(() => {
-    if (show) {
-      setModels([]);
-      // 當 Provider 真正改變時，清空 Key 與模型，避免 A 廠 Key 配 B 廠模型
-      if (tempProvider !== lastProvider) {
-        setTempApiKey("");
-        setTempModel("");
-        setLastProvider(tempProvider);
-      }
-      if (tempApiKey) {
-        handleFetchModels();
-      }
-    }
-  }, [show, tempProvider]);
-
-  const handleFetchModels = async () => {
+  const handleFetchModels = useCallback(async () => {
     if (!tempApiKey) return;
     setModels([]); // 讀取前先清空，確保不會看到上個供應商的模型
     setFetching(true);
     try {
       const list = await llmService.fetchModels(tempProvider, tempApiKey, tempApiBase);
       setModels(list);
-      if (list.length === 0 && tempApiKey) {
+      if (list.length === 0) {
         console.warn('Fetched models list is empty');
       }
     } catch (e) {
@@ -56,7 +42,27 @@ const SettingsModal = ({
     } finally {
       setFetching(false);
     }
-  };
+  }, [tempApiBase, tempApiKey, tempProvider]);
+
+  useEffect(() => {
+    const openedNow = show && !previousShow.current;
+    previousShow.current = show;
+
+    if (!show) return;
+
+    setModels([]);
+    // 當 Provider 真正改變時，清空 Key 與模型，避免 A 廠 Key 配 B 廠模型
+    if (tempProvider !== lastProvider) {
+      setTempApiKey("");
+      setTempModel("");
+      setLastProvider(tempProvider);
+      return;
+    }
+
+    if (openedNow && tempApiKey) {
+      void handleFetchModels();
+    }
+  }, [handleFetchModels, lastProvider, setTempApiKey, setTempModel, show, tempApiKey, tempProvider]);
 
   if (!show) return null;
 

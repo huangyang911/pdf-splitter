@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import * as pdfService from "./services/pdfService";
 import * as llmService from "./services/llmService";
 
@@ -215,7 +215,7 @@ export default function App() {
       }]);
     }
     setTyping(false);
-  }, [messages, apiKey, pdfFile, pageCount, typing, maxTokens]);
+  }, [messages, apiKey, apiBase, model, pdfFile, pageCount, provider, typing, maxTokens]);
 
   const onExecuteSplit = async (msgId, plan) => {
     if (!pdfFile) {

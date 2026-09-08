@@ -10,6 +10,52 @@ const Sidebar = ({
   resetApp 
 }) => {
   const [dragging, setDragging] = useState(false);
+  const [zipProgress, setZipProgress] = useState(null);
+  const [zipError, setZipError] = useState("");
+
+  const downloadAllAsZip = async () => {
+    if (!window.JSZip) {
+      setZipError("打包工具尚未載入，請重新整理後再試。");
+      return;
+    }
+
+    setZipError("");
+    setZipProgress({ stage: "adding", current: 0, total: results.length });
+
+    try {
+      const zip = new window.JSZip();
+      for (let index = 0; index < results.length; index += 1) {
+        const result = results[index];
+        const file = result.blob || await fetch(result.url).then((response) => {
+          if (!response.ok) throw new Error(`無法讀取 ${result.name}`);
+          return response.blob();
+        });
+        zip.file(result.name, file);
+        setZipProgress({ stage: "adding", current: index + 1, total: results.length });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+
+      setZipProgress({ stage: "compressing", current: 0, total: 100 });
+      const archive = await zip.generateAsync(
+        { type: "blob", compression: "DEFLATE", compressionOptions: { level: 6 } },
+        (metadata) => setZipProgress({ stage: "compressing", current: Math.round(metadata.percent), total: 100 }),
+      );
+      const archiveUrl = URL.createObjectURL(archive);
+      const baseName = (pdfFile?.name || "PDF").replace(/\.pdf$/i, "");
+      const link = document.createElement("a");
+      link.href = archiveUrl;
+      link.download = `${baseName}_分割檔案.zip`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(archiveUrl), 60_000);
+      setZipProgress(null);
+    } catch (error) {
+      console.error("ZIP download failed:", error);
+      setZipProgress(null);
+      setZipError("ZIP 打包失敗，請重試或改為下載單一檔案。");
+    }
+  };
 
   return (
     <div className="left-panel">
@@ -68,12 +114,14 @@ const Sidebar = ({
               <span className="result-item-dl">↓</span>
             </a>
           ))}
-          <button className="dl-all-btn" onClick={() => {
-            results.forEach((r, i) => setTimeout(() => {
-              const a = document.createElement("a");
-              a.href = r.url; a.download = r.name; a.click();
-            }, i * 200));
-          }}>↓ 全部下載</button>
+          <button className="dl-all-btn" onClick={downloadAllAsZip} disabled={zipProgress !== null}>
+            {zipProgress
+              ? (zipProgress.stage === "adding"
+                ? `正在加入 ZIP：${zipProgress.current}/${zipProgress.total}`
+                : `正在壓縮 ZIP：${zipProgress.current}%`)
+              : `↓ 下載全部 ZIP（${results.length} 個檔案）`}
+          </button>
+          {zipError && <div className="zip-error" role="alert">{zipError}</div>}
         </div>
       )}
     </div>
